@@ -1,0 +1,705 @@
+import Talent from "../models/Talent.js";
+import Category from "../models/Category.js";
+import Interest from "../models/Interest.js";
+
+import deleteFromCloudinary from "../utils/deleteFromCloudinary.js";
+
+const getUploadedFiles = (files, fieldName) => {
+    return files?.[fieldName] || [];
+};
+
+const createMediaArray = (
+    files = []
+) => {
+    return files.map((file) => ({
+        url: file.path,
+        public_id: file.filename,
+    }));
+};
+
+export const createTalent = async (
+    req,
+    res,
+    next
+) => {
+    try {
+        const {
+            c_id,
+            name,
+            age,
+            categories,
+            address,
+            phone,
+            email,
+            works,
+        } = req.body;
+
+        if (
+            !name ||
+            !age ||
+            !address ||
+            !phone
+        ) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Name, age, address and phone are required",
+            });
+        }
+
+        const profileImages =
+            getUploadedFiles(
+                req.files,
+                "profileImage"
+            );
+
+        if (!profileImages.length) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Profile image is required",
+            });
+        }
+
+        let parsedCategories = categories;
+
+        if (typeof categories === "string") {
+            try {
+                parsedCategories =
+                    JSON.parse(categories);
+            } catch {
+                parsedCategories = [categories];
+            }
+        }
+
+        if (
+            !Array.isArray(parsedCategories) ||
+            !parsedCategories.length
+        ) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    "At least one category is required",
+            });
+        }
+
+        const validCategories =
+            await Category.find({
+                _id: {
+                    $in: parsedCategories,
+                },
+                isActive: true,
+            });
+
+        if (
+            validCategories.length !==
+            parsedCategories.length
+        ) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    "One or more categories are invalid",
+            });
+        }
+
+        let parsedWorks = works;
+
+        if (typeof works === "string") {
+            try {
+                parsedWorks = JSON.parse(works);
+            } catch {
+                parsedWorks = [works];
+            }
+        }
+
+        if (!Array.isArray(parsedWorks)) {
+            parsedWorks = [];
+        }
+
+        const portfolioImages =
+            createMediaArray(
+                getUploadedFiles(
+                    req.files,
+                    "portfolioImages"
+                )
+            );
+
+        const portfolioVideos =
+            createMediaArray(
+                getUploadedFiles(
+                    req.files,
+                    "portfolioVideos"
+                )
+            );
+
+        const talent =
+            await Talent.create({
+                c_id,
+                name,
+                age,
+                categories: parsedCategories,
+                address,
+                phone,
+                email,
+                works: parsedWorks,
+
+                profileImage: {
+                    url: profileImages[0].path,
+                    public_id:
+                        profileImages[0].filename,
+                },
+
+                portfolioImages,
+                portfolioVideos,
+            });
+
+        const populatedTalent =
+            await Talent.findById(
+                talent._id
+            ).populate("categories");
+
+        res.status(201).json({
+            success: true,
+            message:
+                "Talent created successfully",
+            talent: populatedTalent,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const getTalents = async (
+    req,
+    res,
+    next
+) => {
+    try {
+        const page = Number(req.query.page) || 1;
+        const limit = Number(req.query.limit) || 10;
+        const { search } = req.query;
+
+        const filter = {
+            isActive: true,
+        };
+
+        if (search?.trim()) {
+            filter.$or = [
+                {
+                    name: {
+                        $regex: search.trim(),
+                        $options: "i",
+                    },
+                },
+                {
+                    c_id: {
+                        $regex: search.trim(),
+                        $options: "i",
+                    },
+                },
+            ];
+        }
+
+        const talents = await Talent.find(filter)
+            .skip((page - 1) * limit)
+            .limit(limit)
+            .populate("categories")
+            .sort({
+                createdAt: -1,
+            });
+
+        const total = await Talent.countDocuments(filter);
+
+        res.json({
+            success: true,
+            count: talents.length,
+            total,
+            page,
+            limit,
+            talents,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const getTalentsForAll = async (
+    req,
+    res,
+    next
+) => {
+    try {
+        const page = Number(req.query.page) || 1;
+        const limit = Number(req.query.limit) || 10;
+        const { search } = req.query;
+
+        const filter = {
+            isActive: true,
+        };
+
+        if (search?.trim()) {
+            filter.$or = [
+                {
+                    name: {
+                        $regex: search.trim(),
+                        $options: "i",
+                    },
+                },
+                {
+                    c_id: {
+                        $regex: search.trim(),
+                        $options: "i",
+                    },
+                },
+            ];
+        }
+
+        const talents = await Talent.find(filter)
+            .skip((page - 1) * limit)
+            .limit(limit)
+            .select("-phone -email")
+            .populate("categories")
+            .sort({
+                createdAt: -1,
+            });
+
+        const total = await Talent.countDocuments(filter);
+
+        res.json({
+            success: true,
+            count: talents.length,
+            total,
+            page,
+            limit,
+            talents,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const categoryWiseTalents = async(
+    req,
+    res,
+    next
+)=>{
+    try {
+        const page = Number(req.query.page) || 1;
+        const limit = Number(req.query.limit) || 10;
+        const { search } = req.query;
+        const { categoryId } = req.params;
+
+        const filter = {
+            isActive: true,
+            categories: categoryId,
+        };
+
+        if (search?.trim()) {
+            filter.$or = [
+                {
+                    name: {
+                        $regex: search.trim(),
+                        $options: "i",
+                    },
+                },
+                {
+                    c_id: {
+                        $regex: search.trim(),
+                        $options: "i",
+                    },
+                },
+            ];
+        }
+
+        const talents = await Talent.find(filter)
+            .skip((page - 1) * limit)
+            .limit(limit)
+            .select("-phone -email")
+            .populate("categories")
+            .sort({
+                createdAt: -1,
+            });
+
+        const total = await Talent.countDocuments(filter);
+
+        res.json({
+            success: true,
+            count: talents.length,
+            total,
+            page,
+            limit,
+            talents,
+        });
+    } catch (error) {
+        next(error);
+    }
+}
+export const getTalentById = async (
+    req,
+    res,
+    next
+) => {
+    try {
+        const talent =
+            await Talent.findById(
+                req.params.id
+            ).populate("categories");
+
+        if (!talent) {
+            return res.status(404).json({
+                success: false,
+                message: "Talent not found",
+            });
+        }
+
+        res.json({
+            success: true,
+            talent,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const updateTalent = async (
+    req,
+    res,
+    next
+) => {
+    try {
+        const { id } = req.params;
+
+        const talent =
+            await Talent.findById(id);
+
+        if (!talent) {
+            return res.status(404).json({
+                success: false,
+                message: "Talent not found",
+            });
+        }
+
+        const {
+            c_id,
+            name,
+            age,
+            categories,
+            address,
+            phone,
+            email,
+            works,
+            isActive,
+        } = req.body;
+
+        if (c_id !== undefined) {
+            talent.c_id = c_id;
+        }
+
+        if (name !== undefined) {
+            talent.name = name;
+        }
+
+        if (age !== undefined) {
+            talent.age = age;
+        }
+
+        if (address !== undefined) {
+            talent.address = address;
+        }
+
+        if (phone !== undefined) {
+            talent.phone = phone;
+        }
+
+        if (email !== undefined) {
+            talent.email = email;
+        }
+
+        if (typeof isActive === "boolean") {
+            talent.isActive = isActive;
+        }
+
+        if (categories !== undefined) {
+            let parsedCategories =
+                categories;
+
+            if (typeof categories === "string") {
+                try {
+                    parsedCategories =
+                        JSON.parse(categories);
+                } catch {
+                    parsedCategories = [
+                        categories,
+                    ];
+                }
+            }
+
+            if (
+                !Array.isArray(
+                    parsedCategories
+                ) ||
+                !parsedCategories.length
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "At least one category is required",
+                });
+            }
+
+            const validCategories =
+                await Category.find({
+                    _id: {
+                        $in: parsedCategories,
+                    },
+                    isActive: true,
+                });
+
+            if (
+                validCategories.length !==
+                parsedCategories.length
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Invalid category",
+                });
+            }
+
+            talent.categories =
+                parsedCategories;
+        }
+
+        if (works !== undefined) {
+            let parsedWorks = works;
+
+            if (typeof works === "string") {
+                try {
+                    parsedWorks =
+                        JSON.parse(works);
+                } catch {
+                    parsedWorks = [works];
+                }
+            }
+
+            talent.works =
+                Array.isArray(parsedWorks)
+                    ? parsedWorks
+                    : [];
+        }
+
+        const oldProfileImage =
+            talent.profileImage;
+
+        const oldPortfolioImages =
+            talent.portfolioImages;
+
+        const oldPortfolioVideos =
+            talent.portfolioVideos;
+
+        const newProfileImages =
+            getUploadedFiles(
+                req.files,
+                "profileImage"
+            );
+
+        const newPortfolioImages =
+            getUploadedFiles(
+                req.files,
+                "portfolioImages"
+            );
+
+        const newPortfolioVideos =
+            getUploadedFiles(
+                req.files,
+                "portfolioVideos"
+            );
+
+        /*
+         * PROFILE IMAGE
+         *
+         * If a new profile image is uploaded,
+         * replace the old one.
+         */
+        if (newProfileImages.length) {
+            const newFile =
+                newProfileImages[0];
+
+            talent.profileImage = {
+                url: newFile.path,
+                public_id: newFile.filename,
+            };
+        }
+
+        /*
+         * PORTFOLIO IMAGES
+         *
+         * If new portfolio images are supplied,
+         * replace the existing portfolio images.
+         */
+        if (newPortfolioImages.length) {
+            talent.portfolioImages =
+                createMediaArray(
+                    newPortfolioImages
+                );
+        }
+
+        /*
+         * PORTFOLIO VIDEOS
+         *
+         * If new portfolio videos are supplied,
+         * replace existing portfolio videos.
+         */
+        if (newPortfolioVideos.length) {
+            talent.portfolioVideos =
+                createMediaArray(
+                    newPortfolioVideos
+                );
+        }
+
+        await talent.save();
+
+        /*
+         * Delete OLD profile image
+         * after successful database update.
+         */
+        if (
+            newProfileImages.length &&
+            oldProfileImage?.public_id
+        ) {
+            await deleteFromCloudinary(
+                oldProfileImage.public_id,
+                "image"
+            );
+        }
+
+        /*
+         * Delete OLD portfolio images
+         * if portfolio images were replaced.
+         */
+        if (newPortfolioImages.length) {
+            for (
+                const image
+                of oldPortfolioImages
+            ) {
+                if (image.public_id) {
+                    await deleteFromCloudinary(
+                        image.public_id,
+                        "image"
+                    );
+                }
+            }
+        }
+
+        /*
+         * Delete OLD portfolio videos
+         * if portfolio videos were replaced.
+         */
+        if (newPortfolioVideos.length) {
+            for (
+                const video
+                of oldPortfolioVideos
+            ) {
+                if (video.public_id) {
+                    await deleteFromCloudinary(
+                        video.public_id,
+                        "video"
+                    );
+                }
+            }
+        }
+
+        const updatedTalent =
+            await Talent.findById(id)
+                .populate("categories");
+
+        res.json({
+            success: true,
+            message:
+                "Talent updated successfully",
+            talent: updatedTalent,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const deleteTalent = async (
+    req,
+    res,
+    next
+) => {
+    try {
+        const { id } = req.params;
+
+        const talent =
+            await Talent.findById(id);
+
+        if (!talent) {
+            return res.status(404).json({
+                success: false,
+                message: "Talent not found",
+            });
+        }
+
+        /*
+         * Delete profile image
+         */
+        if (
+            talent.profileImage?.public_id
+        ) {
+            await deleteFromCloudinary(
+                talent.profileImage.public_id,
+                "image"
+            );
+        }
+
+        /*
+         * Delete portfolio images
+         */
+        for (
+            const image
+            of talent.portfolioImages
+        ) {
+            if (image.public_id) {
+                await deleteFromCloudinary(
+                    image.public_id,
+                    "image"
+                );
+            }
+        }
+
+        /*
+         * Delete portfolio videos
+         */
+        for (
+            const video
+            of talent.portfolioVideos
+        ) {
+            if (video.public_id) {
+                await deleteFromCloudinary(
+                    video.public_id,
+                    "video"
+                );
+            }
+        }
+
+        /*
+         * Delete interest records
+         * related to this talent.
+         */
+        await Interest.deleteMany({
+            talent: talent._id,
+        });
+
+        await Talent.findByIdAndDelete(id);
+
+        res.json({
+            success: true,
+            message:
+                "Talent deleted successfully",
+        });
+    } catch (error) {
+        next(error);
+    }
+};
