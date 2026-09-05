@@ -488,8 +488,8 @@ export const updateTalent = async (
                     : [];
         }
 
-        const oldProfileImage =
-            talent.profileImage;
+        const oldProfileImageId =
+            talent.profileImage?.public_id;
 
         const oldPortfolioImages =
             talent.portfolioImages;
@@ -529,6 +529,7 @@ export const updateTalent = async (
                 url: newFile.path,
                 public_id: newFile.filename,
             };
+            talent.markModified("profileImage");
         }
 
         /*
@@ -559,18 +560,44 @@ export const updateTalent = async (
 
         await talent.save();
 
+        const savedTalent =
+            await Talent.findById(id).select(
+                "profileImage"
+            );
+
+        if (
+            newProfileImages.length &&
+            savedTalent?.profileImage?.public_id !==
+                newProfileImages[0].filename
+        ) {
+            return res.status(500).json({
+                success: false,
+                message:
+                    "Profile image update was not saved",
+            });
+        }
+
         /*
          * Delete OLD profile image
          * after successful database update.
          */
         if (
             newProfileImages.length &&
-            oldProfileImage?.public_id
+            oldProfileImageId &&
+            oldProfileImageId !==
+                newProfileImages[0].filename
         ) {
-            await deleteFromCloudinary(
-                oldProfileImage.public_id,
-                "image"
-            );
+            try {
+                await deleteFromCloudinary(
+                    oldProfileImageId,
+                    "image"
+                );
+            } catch (cleanupError) {
+                console.error(
+                    "Old profile image cleanup failed:",
+                    cleanupError.message
+                );
+            }
         }
 
         /*
