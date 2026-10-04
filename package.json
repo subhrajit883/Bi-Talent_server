@@ -26,5 +26,14 @@
     "multer-storage-cloudinary": "^4.0.0",
     "nodemon": "^3.1.14",
     "slugify": "^1.6.9"
-  }
+  },
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/subhrajit883/Bi-Talent_server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/subhrajit883/Bi-Talent_server/issues"
+  },
+  "homepage": "https://github.com/subhrajit883/Bi-Talent_server#readme"
 }

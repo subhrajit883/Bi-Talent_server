@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Talent from "../models/Talent.js";
 import Category from "../models/Category.js";
 import Interest from "../models/Interest.js";
@@ -6,6 +7,40 @@ import deleteFromCloudinary from "../utils/deleteFromCloudinary.js";
 
 const getUploadedFiles = (files, fieldName) => {
     return files?.[fieldName] || [];
+};
+
+const getTalentSearchConditions = async (search) => {
+    const searchTerm = search.trim();
+    const matchingCategories = await Category.find({
+        name: {
+            $regex: searchTerm,
+            $options: "i",
+        },
+    }).select("_id");
+
+    return [
+        {
+            name: {
+                $regex: searchTerm,
+                $options: "i",
+            },
+        },
+        {
+            c_id: {
+                $regex: searchTerm,
+                $options: "i",
+            },
+        },
+        ...(matchingCategories.length > 0
+            ? [{
+                categories: {
+                    $in: matchingCategories.map(
+                        (category) => category._id
+                    ),
+                },
+            }]
+            : []),
+    ];
 };
 
 const createMediaArray = (
@@ -32,10 +67,24 @@ export const createTalent = async (
             phone,
             email,
             works,
+            recommendTalent,
+            bio,
+            height,
+            weight,
+            chestBust,
+            waist,
+            hips,
+            shoulder,
+            shoeSize,
+            dressSize,
+            clothingSize,
+            hairColour,
+            eyeColour,
+            skinTone,
         } = req.body;
 
         if (
-            !name ||
+            !name || 
             !age ||
             !address ||
             !phone
@@ -116,6 +165,21 @@ export const createTalent = async (
             parsedWorks = [];
         }
 
+        // ================================
+        // Parse Recommend Talent
+        // ================================
+        let parsedRecommendTalent = false;
+
+        if (
+            recommendTalent === true ||
+            recommendTalent === "true"
+        ) {
+            parsedRecommendTalent = true;
+        }
+
+        // ================================
+        // Portfolio Media
+        // ================================
         const portfolioImages =
             createMediaArray(
                 getUploadedFiles(
@@ -132,6 +196,9 @@ export const createTalent = async (
                 )
             );
 
+        // ================================
+        // Create Talent
+        // ================================
         const talent =
             await Talent.create({
                 c_id,
@@ -142,6 +209,19 @@ export const createTalent = async (
                 phone,
                 email,
                 works: parsedWorks,
+                bio,
+                height,
+                weight,
+                chestBust,
+                waist,
+                hips,
+                shoulder,
+                shoeSize,
+                dressSize,
+                clothingSize,
+                hairColour,
+                eyeColour,
+                skinTone,
 
                 profileImage: {
                     url: profileImages[0].path,
@@ -151,6 +231,9 @@ export const createTalent = async (
 
                 portfolioImages,
                 portfolioVideos,
+
+                recommendTalent:
+                    parsedRecommendTalent,
             });
 
         const populatedTalent =
@@ -169,6 +252,51 @@ export const createTalent = async (
     }
 };
 
+export const getRecommendedTalents = async (
+    req,
+    res,
+    next
+) => {
+    try {
+        const page = Number(req.query.page) || 1;
+        const limit = Number(req.query.limit) || 500;
+        const { search } = req.query;
+
+        const filter = {
+            isActive: true,
+            recommendTalent: true,
+        };
+
+        if (search?.trim()) {
+            filter.$or =
+                await getTalentSearchConditions(search);
+        }
+
+        const talents = await Talent.find(filter)
+            .skip((page - 1) * limit)
+            .limit(limit)
+            .select("-phone -email")
+            .populate("categories")
+            .sort({
+                createdAt: -1,
+            });
+
+        const total = await Talent.countDocuments(filter);
+
+        res.json({
+            success: true,
+            count: talents.length,
+            total,
+            page,
+            limit,
+            talents,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+
 export const getTalents = async (
     req,
     res,
@@ -176,28 +304,54 @@ export const getTalents = async (
 ) => {
     try {
         const page = Number(req.query.page) || 1;
-        const limit = Number(req.query.limit) || 10;
+        const limit = Number(req.query.limit) || 500;
         const { search } = req.query;
+        const categoriesQuery = req.query.categories;
 
         const filter = {
             isActive: true,
         };
 
+        if (categoriesQuery !== undefined) {
+            const categoryValues = (
+                Array.isArray(categoriesQuery)
+                    ? categoriesQuery
+                    : [categoriesQuery]
+            );
+
+            const categoryIds = categoryValues
+                .flatMap((categoryId) =>
+                    typeof categoryId === "string"
+                        ? categoryId.split(",")
+                        : []
+                )
+                .map((categoryId) => categoryId.trim())
+                .filter(Boolean);
+
+            if (
+                categoryIds.length === 0 ||
+                categoryValues.some(
+                    (categoryId) => typeof categoryId !== "string"
+                ) ||
+                categoryIds.some(
+                    (categoryId) =>
+                        !mongoose.Types.ObjectId.isValid(categoryId)
+                )
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: "One or more category IDs are invalid",
+                });
+            }
+
+            filter.categories = {
+                $in: categoryIds,
+            };
+        }
+
         if (search?.trim()) {
-            filter.$or = [
-                {
-                    name: {
-                        $regex: search.trim(),
-                        $options: "i",
-                    },
-                },
-                {
-                    c_id: {
-                        $regex: search.trim(),
-                        $options: "i",
-                    },
-                },
-            ];
+            filter.$or =
+                await getTalentSearchConditions(search);
         }
 
         const talents = await Talent.find(filter)
@@ -230,7 +384,7 @@ export const getTalentsForAll = async (
 ) => {
     try {
         const page = Number(req.query.page) || 1;
-        const limit = Number(req.query.limit) || 10;
+        const limit = Number(req.query.limit) || 500;
         const { search } = req.query;
 
         const filter = {
@@ -238,20 +392,8 @@ export const getTalentsForAll = async (
         };
 
         if (search?.trim()) {
-            filter.$or = [
-                {
-                    name: {
-                        $regex: search.trim(),
-                        $options: "i",
-                    },
-                },
-                {
-                    c_id: {
-                        $regex: search.trim(),
-                        $options: "i",
-                    },
-                },
-            ];
+            filter.$or =
+                await getTalentSearchConditions(search);
         }
 
         const talents = await Talent.find(filter)
@@ -285,7 +427,7 @@ export const categoryWiseTalents = async(
 )=>{
     try {
         const page = Number(req.query.page) || 1;
-        const limit = Number(req.query.limit) || 10;
+        const limit = Number(req.query.limit) || 500;
         const { search } = req.query;
         const { categoryId } = req.params;
 
@@ -295,20 +437,8 @@ export const categoryWiseTalents = async(
         };
 
         if (search?.trim()) {
-            filter.$or = [
-                {
-                    name: {
-                        $regex: search.trim(),
-                        $options: "i",
-                    },
-                },
-                {
-                    c_id: {
-                        $regex: search.trim(),
-                        $options: "i",
-                    },
-                },
-            ];
+            filter.$or =
+                await getTalentSearchConditions(search);
         }
 
         const talents = await Talent.find(filter)
@@ -389,7 +519,42 @@ export const updateTalent = async (
             email,
             works,
             isActive,
+            bio,
+            height,
+            weight,
+            chestBust,
+            waist,
+            hips,
+            shoulder,
+            shoeSize,
+            dressSize,
+            clothingSize,
+            hairColour,
+            eyeColour,
+            skinTone,
         } = req.body;
+
+        const profileFields = {
+            bio,
+            height,
+            weight,
+            chestBust,
+            waist,
+            hips,
+            shoulder,
+            shoeSize,
+            dressSize,
+            clothingSize,
+            hairColour,
+            eyeColour,
+            skinTone,
+        };
+
+        for (const [field, value] of Object.entries(profileFields)) {
+            if (value !== undefined) {
+                talent[field] = value;
+            }
+        }
 
         if (c_id !== undefined) {
             talent.c_id = c_id;

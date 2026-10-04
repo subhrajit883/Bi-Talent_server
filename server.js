@@ -12,6 +12,7 @@ import categoryRoutes from "./routes/categoryRoutes.js";
 import talentRoutes from "./routes/talentRoutes.js";
 import clientRoutes from "./routes/clientRoutes.js";
 import interestRoutes from "./routes/interestRoutes.js";
+import talentEnquiryRoutes from "./routes/talentEnquiryRoutes.js";
 
 import {
     notFound,
@@ -80,6 +81,11 @@ app.use(
 app.use(
     "/api/interests",
     interestRoutes
+);
+
+app.use(
+    "/api/talent-enquiries",
+    talentEnquiryRoutes
 );
 
 app.use(notFound);

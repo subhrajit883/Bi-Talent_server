@@ -227,7 +227,7 @@ export const clientLogin = async (
 
         res.json({
             success: true,
-            message: "Client login successful",
+            message: "login successful",
 
             token,
 

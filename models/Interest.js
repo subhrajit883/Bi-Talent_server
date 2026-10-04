@@ -14,6 +14,11 @@ const interestSchema = new mongoose.Schema(
             required: true,
         },
 
+        message: {
+            type: String,
+            trim: true,
+        },
+
         status: {
             type: String,
             enum: [

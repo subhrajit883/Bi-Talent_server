@@ -20,6 +20,7 @@ const router = express.Router();
  * Client
  */
 
+// Optional request body: { message: string }
 router.post(
     "/:talentId",
     protect,

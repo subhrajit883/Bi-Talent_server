@@ -8,6 +8,17 @@ export const showInterest = async (
 ) => {
     try {
         const { talentId } = req.params;
+        const { message } = req.body ?? {};
+
+        if (
+            message !== undefined &&
+            typeof message !== "string"
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Message must be a string",
+            });
+        }
 
         const talent =
             await Talent.findById(
@@ -40,6 +51,9 @@ export const showInterest = async (
             await Interest.create({
                 client: req.user._id,
                 talent: talentId,
+                ...(message !== undefined && {
+                    message: message.trim(),
+                }),
             });
 
         const populatedInterest =

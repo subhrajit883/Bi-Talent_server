@@ -8,6 +8,7 @@ import {
     deleteTalent,
     getTalentsForAll,
     categoryWiseTalents,
+    getRecommendedTalents,
 
 } from "../controllers/talentController.js";
 
@@ -25,6 +26,7 @@ const router = express.Router();
 /*
  * Public
  */
+// Optional search query matches talent name, talent ID, and category name.
 router.get(
     "/",
     getTalents
@@ -36,9 +38,20 @@ router.get(
 );
 
 router.get(
+    "/category/:categoryId",
+    categoryWiseTalents
+);
+
+router.get(
+    "/recommended",
+    getRecommendedTalents
+);
+
+router.get(
     "/forall",
     getTalentsForAll
 );
+
 
 router.get(
     "/:id",
