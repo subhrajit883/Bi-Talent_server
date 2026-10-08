@@ -70,6 +70,7 @@ export const createTalent = async (
             recommendTalent,
             bio,
             height,
+            youtubeLink,
             weight,
             chestBust,
             waist,
@@ -84,7 +85,7 @@ export const createTalent = async (
         } = req.body;
 
         if (
-            !name || 
+            !name ||
             !age ||
             !address ||
             !phone
@@ -222,7 +223,7 @@ export const createTalent = async (
                 hairColour,
                 eyeColour,
                 skinTone,
-
+                youtubeLink,
                 profileImage: {
                     url: profileImages[0].path,
                     public_id:
@@ -420,11 +421,11 @@ export const getTalentsForAll = async (
     }
 };
 
-export const categoryWiseTalents = async(
+export const categoryWiseTalents = async (
     req,
     res,
     next
-)=>{
+) => {
     try {
         const page = Number(req.query.page) || 1;
         const limit = Number(req.query.limit) || 500;
@@ -521,6 +522,7 @@ export const updateTalent = async (
             isActive,
             bio,
             height,
+            youtubeLink,
             weight,
             chestBust,
             waist,
@@ -554,6 +556,10 @@ export const updateTalent = async (
             if (value !== undefined) {
                 talent[field] = value;
             }
+        }
+
+        if (youtubeLink !== undefined) {
+            talent.youtubeLink = youtubeLink.trim();
         }
 
         if (c_id !== undefined) {
@@ -733,7 +739,7 @@ export const updateTalent = async (
         if (
             newProfileImages.length &&
             savedTalent?.profileImage?.public_id !==
-                newProfileImages[0].filename
+            newProfileImages[0].filename
         ) {
             return res.status(500).json({
                 success: false,
@@ -750,7 +756,7 @@ export const updateTalent = async (
             newProfileImages.length &&
             oldProfileImageId &&
             oldProfileImageId !==
-                newProfileImages[0].filename
+            newProfileImages[0].filename
         ) {
             try {
                 await deleteFromCloudinary(

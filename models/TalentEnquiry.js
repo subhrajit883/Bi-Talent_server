@@ -8,6 +8,7 @@ const talentEnquirySchema = new mongoose.Schema(
             trim: true,
         },
 
+
         dateOfBirth: {
             type: Date,
             // required: true,
@@ -30,6 +31,16 @@ const talentEnquirySchema = new mongoose.Schema(
             // required: true,
             trim: true,
             lowercase: true,
+        },
+
+        driveLink : {
+            type: String,
+            trim: true,
+        },
+
+        youtubeLink : {
+            type: String,
+            trim: true,
         },
 
         address: {

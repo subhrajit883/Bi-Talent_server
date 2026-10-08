@@ -155,7 +155,13 @@ const talentSchema = new mongoose.Schema(
         portfolioImages: [mediaSchema],
 
         portfolioVideos: [mediaSchema],
-
+        
+      // YouTube portfolio video link
+        youtubeLink: {
+            type: String,
+            trim: true,
+            default: "",
+        },
         isActive: {
             type: Boolean,
             default: true,

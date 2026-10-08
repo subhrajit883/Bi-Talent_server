@@ -14,6 +14,8 @@ export const createTalentEnquiry = async (req, res, next) => {
             address,
             interestedInCategory,
             works,
+            driveLink,
+            youtubeLink
         } = req.body;
 
         // Only fullName and contactNumber are required
@@ -113,6 +115,8 @@ export const createTalentEnquiry = async (req, res, next) => {
             ...(address && { address }),
             ...(categoryId && { interestedInCategory: categoryId }),
             works: parsedWorks,
+            ...(driveLink && { driveLink: driveLink.trim() }),
+            ...(youtubeLink && { youtubeLink: youtubeLink.trim() }),
         });
 
         const populatedEnquiry = await TalentEnquiry.findById(
