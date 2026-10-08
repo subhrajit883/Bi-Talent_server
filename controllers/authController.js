@@ -1,6 +1,15 @@
+import { createHash, randomBytes } from "node:crypto";
 import Admin from "../models/Admin.js";
 import Client from "../models/Client.js";
 import generateToken from "../utils/generateToken.js";
+import createPasswordResetEmailSender from "../utils/sendPasswordResetEmail.js";
+
+const PASSWORD_RESET_EXPIRY_MS = 60 * 60 * 1000;
+const PASSWORD_RESET_MESSAGE =
+    "If an account with that email exists, a password reset link has been sent.";
+
+const hashResetToken = (token) =>
+    createHash("sha256").update(token).digest("hex");
 
 export const registerAdmin = async (req, res) => {
     try {
@@ -240,6 +249,128 @@ export const clientLogin = async (
                 address: client.address,
                 role: client.role,
             },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const forgotPassword = async (req, res, next) => {
+    try {
+        const email =
+            typeof req.body.email === "string"
+                ? req.body.email.trim().toLowerCase()
+                : "";
+
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return res.status(400).json({
+                success: false,
+                message: "A valid email address is required",
+            });
+        }
+
+        const sendResetEmail = createPasswordResetEmailSender();
+        const [admin, client] = await Promise.all([
+            Admin.findOne({ email }),
+            Client.findOne({ email }),
+        ]);
+        const accounts = [admin, client].filter(Boolean);
+
+        if (accounts.length === 0) {
+            return res.json({
+                success: true,
+                message: PASSWORD_RESET_MESSAGE,
+            });
+        }
+
+        const resetLinks = [];
+
+        for (const account of accounts) {
+            const token = randomBytes(32).toString("hex");
+            account.resetPasswordToken = hashResetToken(token);
+            account.resetPasswordExpires = new Date(
+                Date.now() + PASSWORD_RESET_EXPIRY_MS
+            );
+            await account.save();
+
+            resetLinks.push({
+                account,
+                token,
+                role: account instanceof Admin ? "admin" : "client",
+            });
+        }
+
+        try {
+            for (const { account, token, role } of resetLinks) {
+                await sendResetEmail({
+                    email: account.email,
+                    name: account.name,
+                    role,
+                    token,
+                });
+            }
+        } catch (error) {
+            for (const { account } of resetLinks) {
+                account.resetPasswordToken = undefined;
+                account.resetPasswordExpires = undefined;
+                await account.save();
+            }
+            throw error;
+        }
+
+        return res.json({
+            success: true,
+            message: PASSWORD_RESET_MESSAGE,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const resetPassword = async (req, res, next) => {
+    try {
+        const { token, password } = req.body;
+
+        if (
+            typeof token !== "string" ||
+            !token ||
+            typeof password !== "string" ||
+            password.length < 6
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "A valid token and a password of at least 6 characters are required",
+            });
+        }
+
+        const resetPasswordToken = hashResetToken(token);
+        const tokenFilter = {
+            resetPasswordToken,
+            resetPasswordExpires: { $gt: new Date() },
+        };
+        const account =
+            (await Admin.findOne(tokenFilter).select(
+                "+resetPasswordToken +resetPasswordExpires"
+            )) ||
+            (await Client.findOne(tokenFilter).select(
+                "+resetPasswordToken +resetPasswordExpires"
+            ));
+
+        if (!account) {
+            return res.status(400).json({
+                success: false,
+                message: "Password reset token is invalid or expired",
+            });
+        }
+
+        account.password = password;
+        account.resetPasswordToken = undefined;
+        account.resetPasswordExpires = undefined;
+        await account.save();
+
+        return res.json({
+            success: true,
+            message: "Password has been reset successfully",
         });
     } catch (error) {
         next(error);

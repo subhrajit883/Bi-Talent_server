@@ -5,7 +5,9 @@ import {
     clientRegister,
     clientLogin,
     getMe,
+    forgotPassword,
     registerAdmin,
+    resetPassword,
 } from "../controllers/authController.js";
 
 import { protect } from "../middlewares/authMiddleware.js";
@@ -30,6 +32,16 @@ router.post(
 router.post(
     "/client/login",
     clientLogin
+);
+
+router.post(
+    "/forgot-password",
+    forgotPassword
+);
+
+router.post(
+    "/reset-password",
+    resetPassword
 );
 
 router.get(
